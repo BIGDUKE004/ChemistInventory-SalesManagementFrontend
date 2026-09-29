@@ -93,7 +93,7 @@ export default function Auth() {
               onChange={(e) => dispatch(setApiBase(e.target.value))}
             />
           </div>
-
+ 
           <div className="tabs">
             <button className={mode === 'login' ? 'on' : ''} onClick={() => { setMode('login'); setError(''); }}>
               Log in
