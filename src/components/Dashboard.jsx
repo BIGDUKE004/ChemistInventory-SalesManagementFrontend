@@ -1,7 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { clearSession } from '../store/authSlice';
-import { callApi } from '../api';
+import { callApi, logResult } from '../api';
+
+const TABS = [
+  { id: 'inventory', label: 'Inventory' },
+  { id: 'dispense', label: 'Dispense' },
+  { id: 'log', label: 'Activity' }
+];
 
 export default function Dashboard() {
   const dispatch = useDispatch();
@@ -12,58 +18,72 @@ export default function Dashboard() {
 
   async function logout() {
     try {
-      await callApi(dispatch, { apiBase, path: '/Authorization/Logout', method: 'POST', body: { userName } });
+      const { raw } = await callApi(dispatch, { apiBase, path: '/Authorization/Logout', method: 'POST', body: { userName } });
+      logResult(dispatch, `Signed out ${fullName || userName}`, true, raw);
     } catch {}
     dispatch(clearSession());
   }
 
   return (
-    <div className="dash">
-      <header className="dash-head">
+    <div className="appshell">
+      <aside className="sidebar">
         <div className="brand">
           <span className="mark" />
           <span className="brand-name">Apothic</span>
         </div>
-        <div className="who">
-          <span>{fullName || userName}</span>
+        <nav className="sidenav">
+          {TABS.map((t) => (
+            <button key={t.id} className={tab === t.id ? 'on' : ''} onClick={() => setTab(t.id)}>
+              {t.label}
+            </button>
+          ))}
+        </nav>
+        <div className="sidefoot">
+          <span className="who-name">{fullName || userName}</span>
           <button className="btn ghost" onClick={logout}>Log out</button>
         </div>
-      </header>
+      </aside>
 
-      <nav className="rail">
-        {['inventory', 'dispense', 'log'].map((t) => (
-          <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
-            {t === 'inventory' ? 'Inventory' : t === 'dispense' ? 'Dispense' : 'Activity log'}
-          </button>
-        ))}
-      </nav>
-
-      <main className="sheet">
+      <main className="content">
         {error && <p className="notice err">{error}</p>}
         {tab === 'inventory' && <Inventory token={token} apiBase={apiBase} setError={setError} />}
         {tab === 'dispense' && <Dispense token={token} apiBase={apiBase} setError={setError} />}
         {tab === 'log' && <ActivityLog />}
       </main>
-
-      <p className="note">
-        View, Search and Get-amount-of-drugs aren't wired up — those endpoints are GET requests that
-        expect a request body, which browsers won't send. Convert them to query params on the backend to enable them here.
-      </p>
     </div>
   );
 }
 
 function Inventory({ token, apiBase, setError }) {
   const dispatch = useDispatch();
+  const [drugs, setDrugs] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [lookupResult, setLookupResult] = useState(null);
+
+  async function loadDrugs() {
+    setError('');
+    try {
+      const { data, raw } = await callApi(dispatch, { apiBase, path: '/DrugManagement/GetAllDrugs', token });
+      setDrugs(data || []);
+      logResult(dispatch, `Loaded stock — ${(data || []).length} drug${data?.length === 1 ? '' : 's'} on shelf`, true, raw);
+    } catch (err) {
+      setError(err.message);
+      setDrugs([]);
+      logResult(dispatch, 'Could not load stock', false, err.raw || err.message);
+    }
+  }
+
+  useEffect(() => { loadDrugs(); /* eslint-disable-next-line */ }, []);
 
   async function addDrug(e) {
     e.preventDefault();
     setError('');
     setBusy(true);
     const f = new FormData(e.target);
+    const brandName = f.get('brandName');
     const body = {
-      brandName: f.get('brandName'),
+      brandName,
       genericName: f.get('genericName'),
       strength: f.get('strength'),
       dosage: f.get('dosage'),
@@ -75,53 +95,141 @@ function Inventory({ token, apiBase, setError }) {
       price: Number(f.get('price'))
     };
     try {
-      await callApi(dispatch, { apiBase, path: '/DrugManagement/AddDrug', method: 'POST', body, token });
+      const { raw } = await callApi(dispatch, { apiBase, path: '/DrugManagement/AddDrug', method: 'POST', body, token });
+      logResult(dispatch, `Added ${brandName} to stock`, true, raw);
       e.target.reset();
+      setShowAdd(false);
+      loadDrugs();
     } catch (err) {
       setError(err.message);
+      logResult(dispatch, `Could not add ${brandName}`, false, err.raw || err.message);
     } finally {
       setBusy(false);
     }
   }
 
-  async function deleteDrug(e) {
-    e.preventDefault();
+  async function removeDrug(brandName) {
     setError('');
-    setBusy(true);
-    const f = new FormData(e.target);
     try {
-      await callApi(dispatch, { apiBase, path: '/DrugManagement/DeleteDrug', method: 'DELETE', body: { id: Number(f.get('id')) }, token });
-      e.target.reset();
+      const { raw } = await callApi(dispatch, { apiBase, path: '/DrugManagement/DeleteDrug', method: 'DELETE', query: { brandName }, token });
+      logResult(dispatch, `Removed ${brandName} from stock`, true, raw);
+      if (lookupResult?.brandName === brandName) setLookupResult(null);
+      loadDrugs();
     } catch (err) {
       setError(err.message);
-    } finally {
-      setBusy(false);
+      logResult(dispatch, `Could not remove ${brandName}`, false, err.raw || err.message);
+    }
+  }
+
+  async function viewDrug(e) {
+    e.preventDefault();
+    setError('');
+    const f = new FormData(e.target);
+    const brandName = f.get('viewBrandName');
+    try {
+      const { data, raw } = await callApi(dispatch, { apiBase, path: '/DrugManagement/ViewDrugDetails', query: { brandName }, token });
+      setLookupResult(data.drug);
+      logResult(dispatch, `Viewed ${brandName}`, true, raw);
+    } catch (err) {
+      setError(err.message);
+      setLookupResult(null);
+      logResult(dispatch, `Could not find ${brandName}`, false, err.raw || err.message);
+    }
+  }
+
+  async function searchDrugs(e) {
+    e.preventDefault();
+    setError('');
+    const f = new FormData(e.target);
+    const genericName = f.get('genericName');
+    try {
+      const { data, raw } = await callApi(dispatch, { apiBase, path: '/DrugManagement/SearchDrug', query: { genericName }, token });
+      setDrugs(data.drugs || []);
+      logResult(dispatch, data.message, true, raw);
+    } catch (err) {
+      setError(err.message);
+      logResult(dispatch, `Search failed for "${genericName}"`, false, err.raw || err.message);
     }
   }
 
   return (
     <>
-      <h2>Add drug to stock</h2>
-      <form className="grid2" onSubmit={addDrug}>
-        <label>Brand name<input name="brandName" required /></label>
-        <label>Generic name<input name="genericName" required /></label>
-        <label>Strength<input name="strength" placeholder="500mg" /></label>
-        <label>Dosage form<input name="dosage" placeholder="Tablet" /></label>
-        <label>Manufacturer<input name="manufacturer" /></label>
-        <label>Batch number<input name="batchNumber" className="mono" /></label>
-        <label>Manufacture date<input name="manufactureDate" type="date" /></label>
-        <label>Expiry date<input name="expiryDate" type="date" /></label>
-        <label>Quantity in stock<input name="quantityInStock" type="number" min="0" required /></label>
-        <label>Price<input name="price" type="number" min="0" required /></label>
-        <div className="row-actions"><button className="btn" type="submit" disabled={busy}>Add drug</button></div>
-      </form>
+      <div className="page-head">
+        <div>
+          <h1>Inventory</h1>
+          <p className="page-sub">Everything currently on the shelf.</p>
+        </div>
+        <div className="page-actions">
+          <button className="btn ghost" onClick={loadDrugs}>Refresh</button>
+          <button className="btn" style={{ width: 'auto' }} onClick={() => setShowAdd((v) => !v)}>
+            {showAdd ? 'Cancel' : 'Add drug'}
+          </button>
+        </div>
+      </div>
 
-      <hr />
-      <h2>Remove drug by ID</h2>
-      <form className="grid2" onSubmit={deleteDrug}>
-        <label>Drug ID<input name="id" type="number" required /></label>
-        <div className="row-actions"><button className="btn danger" type="submit" disabled={busy}>Delete</button></div>
-      </form>
+      <div className="toolrow">
+        <form className="inline-form" onSubmit={searchDrugs}>
+          <input name="genericName" placeholder="Search by generic name…" />
+          <button className="btn ghost small" type="submit">Search</button>
+        </form>
+        <form className="inline-form" onSubmit={viewDrug}>
+          <input name="viewBrandName" placeholder="View by brand name…" />
+          <button className="btn ghost small" type="submit">View</button>
+        </form>
+      </div>
+
+      {lookupResult && (
+        <div className="lookup-card">
+          <div>
+            <span className="stock-name">{lookupResult.brandName}</span>
+            <span className="stock-sub">{lookupResult.genericName} · {lookupResult.strength} {lookupResult.dosage}</span>
+          </div>
+          <div className="stock-meta">
+            <span className="mono">{lookupResult.quantityInStock} in stock</span>
+            <span className="mono">batch {lookupResult.batchNumber || '—'}</span>
+            <span className="mono">exp {lookupResult.expiryDate || '—'}</span>
+            <span className="mono">₦{lookupResult.price ?? '—'}</span>
+          </div>
+          <button className="btn ghost small" onClick={() => setLookupResult(null)}>Close</button>
+        </div>
+      )}
+
+      {showAdd && (
+        <form className="grid2 addform" onSubmit={addDrug}>
+          <label>Brand name<input name="brandName" required /></label>
+          <label>Generic name<input name="genericName" required /></label>
+          <label>Strength<input name="strength" placeholder="500mg" /></label>
+          <label>Dosage form<input name="dosage" placeholder="Tablet" /></label>
+          <label>Manufacturer<input name="manufacturer" /></label>
+          <label>Batch number<input name="batchNumber" className="mono" /></label>
+          <label>Manufacture date<input name="manufactureDate" type="date" /></label>
+          <label>Expiry date<input name="expiryDate" type="date" /></label>
+          <label>Quantity in stock<input name="quantityInStock" type="number" min="0" required /></label>
+          <label>Price<input name="price" type="number" min="0" required /></label>
+          <div className="row-actions"><button className="btn" type="submit" disabled={busy}>Save to stock</button></div>
+        </form>
+      )}
+
+      {drugs === null && <p className="empty">Loading stock…</p>}
+      {drugs && drugs.length === 0 && <p className="empty">Nothing on the shelf yet. Add your first drug above.</p>}
+      {drugs && drugs.length > 0 && (
+        <div className="stockgrid">
+          {drugs.map((d) => (
+            <div className="stockcard" key={d.id}>
+              <div className="stock-main">
+                <span className="stock-name">{d.brandName}</span>
+                <span className="stock-sub">{d.genericName} · {d.strength} {d.dosage}</span>
+              </div>
+              <div className="stock-meta">
+                <span className="mono">{d.quantityInStock} in stock</span>
+                <span className="mono">batch {d.batchNumber || '—'}</span>
+                <span className="mono">exp {d.expiryDate || '—'}</span>
+              </div>
+              <button className="btn danger small" onClick={() => removeDrug(d.brandName)}>Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
     </>
   );
 }
@@ -135,20 +243,19 @@ function Dispense({ token, apiBase, setError }) {
     setError('');
     setBusy(true);
     const f = new FormData(e.target);
+    const drugName = f.get('drugName');
+    const quantity = Number(f.get('quantity'));
     const body = {
       name: f.get('name'),
-      drugs: [{
-        drugName: f.get('drugName'),
-        batchId: f.get('batchId'),
-        dosage: f.get('dosage'),
-        quantity: Number(f.get('quantity'))
-      }]
+      drugs: [{ drugName, batchId: f.get('batchId'), dosage: f.get('dosage'), quantity }]
     };
     try {
-      await callApi(dispatch, { apiBase, path: '/Sales/dispenseDrug', method: 'POST', body, token });
+      const { raw } = await callApi(dispatch, { apiBase, path: '/Sales/dispenseDrug', method: 'POST', body, token });
+      logResult(dispatch, `Dispensed ${quantity} × ${drugName}`, true, raw);
       e.target.reset();
     } catch (err) {
       setError(err.message);
+      logResult(dispatch, `Could not dispense ${drugName}`, false, err.raw || err.message);
     } finally {
       setBusy(false);
     }
@@ -156,8 +263,13 @@ function Dispense({ token, apiBase, setError }) {
 
   return (
     <>
-      <h2>Dispense a sale</h2>
-      <form className="grid2" onSubmit={dispense}>
+      <div className="page-head">
+        <div>
+          <h1>Dispense</h1>
+          <p className="page-sub">Record a sale as it happens at the counter.</p>
+        </div>
+      </div>
+      <form className="grid2 addform" onSubmit={dispense}>
         <label>Sold by (name)<input name="name" required /></label>
         <label>Drug name<input name="drugName" required /></label>
         <label>Batch ID<input name="batchId" className="mono" /></label>
@@ -165,26 +277,37 @@ function Dispense({ token, apiBase, setError }) {
         <label>Quantity<input name="quantity" type="number" min="1" required /></label>
         <div className="row-actions"><button className="btn" type="submit" disabled={busy}>Dispense</button></div>
       </form>
-      <p className="note">Sends one item per submission as sellDrugRequest.drugs[0].</p>
     </>
   );
 }
 
 function ActivityLog() {
   const entries = useSelector((s) => s.log.entries);
-  if (!entries.length) return <p className="empty">Nothing sent yet.</p>;
+  const [openId, setOpenId] = useState(null);
+
   return (
-    <ul className="log">
-      {entries.map((l) => (
-        <li key={l.id}>
-          <div className="lh">
-            <span className="lbl">{l.label}</span>
-            <span className={`st ${l.status < 400 ? 's2' : 's4'}`}>{l.status}</span>
-          </div>
-          <div className="lh"><span className="tm">{l.time}</span></div>
-          <pre>{l.body.slice(0, 400)}</pre>
-        </li>
-      ))}
-    </ul>
+    <>
+      <div className="page-head">
+        <div>
+          <h1>Activity</h1>
+          <p className="page-sub">Everything that's happened this session.</p>
+        </div>
+      </div>
+      {!entries.length && <p className="empty">Nothing has happened yet this session.</p>}
+      {!!entries.length && (
+        <ul className="feed">
+          {entries.map((l) => (
+            <li key={l.id}>
+              <button className="feed-row" onClick={() => setOpenId(openId === l.id ? null : l.id)}>
+                <span className={`feed-dot ${l.ok ? 'ok' : 'bad'}`} />
+                <span className="feed-text">{l.summary}</span>
+                <span className="feed-time">{l.time}</span>
+              </button>
+              {openId === l.id && <pre className="feed-detail">{(l.detail || '').slice(0, 500)}</pre>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }

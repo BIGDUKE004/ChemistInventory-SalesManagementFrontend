@@ -9,12 +9,15 @@ const logSlice = createSlice({
         state.entries.unshift(action.payload);
         if (state.entries.length > 50) state.entries.pop();
       },
-      prepare: (label, status, body) => ({
+      // summary: human sentence, e.g. "Added Panadol to stock"
+      // ok: true/false, drives the dot colour
+      // detail: raw response text, shown only if the person expands the row
+      prepare: (summary, ok, detail) => ({
         payload: {
           id: nanoid(),
-          label,
-          status,
-          body: typeof body === 'string' ? body : JSON.stringify(body),
+          summary,
+          ok,
+          detail: typeof detail === 'string' ? detail : JSON.stringify(detail),
           time: new Date().toLocaleTimeString()
         }
       })

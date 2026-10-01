@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { setSession } from '../store/authSlice';
 import { setApiBase } from '../store/configSlice';
-import { callApi } from '../api';
+import { callApi, logResult } from '../api';
 
 export default function Auth() {
   const dispatch = useDispatch();
@@ -18,16 +18,19 @@ export default function Auth() {
     setError('');
     setBusy(true);
     const f = new FormData(e.target);
+    const userName = f.get('userName');
     try {
-      const res = await callApi(dispatch, {
+      const { data, raw } = await callApi(dispatch, {
         apiBase,
         path: '/Authorization/Login',
         method: 'POST',
-        body: { userName: f.get('userName'), password: f.get('password') }
+        body: { userName, password: f.get('password') }
       });
-      dispatch(setSession({ token: res.jwtId, userName: res.userName, fullName: res.fullName }));
+      dispatch(setSession({ token: data.jwtId, userName: data.userName, fullName: data.fullName }));
+      logResult(dispatch, `Signed in as ${data.fullName || data.userName}`, true, raw);
     } catch (err) {
       setError(err.message);
+      logResult(dispatch, `Sign-in failed for "${userName}"`, false, err.raw || err.message);
     } finally {
       setBusy(false);
     }
@@ -39,17 +42,20 @@ export default function Auth() {
     setNotice('');
     setBusy(true);
     const f = new FormData(e.target);
+    const fullName = f.get('fullName');
     try {
-      await callApi(dispatch, {
+      const { raw } = await callApi(dispatch, {
         apiBase,
         path: '/Authorization/Register',
         method: 'POST',
-        body: { fullName: f.get('fullName'), userName: f.get('userName'), passWord: f.get('passWord') }
+        body: { fullName, userName: f.get('userName'), passWord: f.get('passWord') }
       });
+      logResult(dispatch, `Registered new account for ${fullName}`, true, raw);
       setNotice('Account created. Log in below.');
       setMode('login');
     } catch (err) {
       setError(err.message);
+      logResult(dispatch, `Registration failed for ${fullName}`, false, err.raw || err.message);
     } finally {
       setBusy(false);
     }
