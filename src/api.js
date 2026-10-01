@@ -2,7 +2,7 @@ import { addEntry } from './store/logSlice';
 import { setConnected } from './store/configSlice';
 
 /**
- * Calls the Chemist backend and records the result in the activity log.
+ * Calls the Apothic backend and records the result in the activity log.
  * Throws an Error with a readable message on failure so callers can
  * show it inline without duplicating error-parsing logic.
  */

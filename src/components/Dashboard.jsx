@@ -22,7 +22,7 @@ export default function Dashboard() {
       <header className="dash-head">
         <div className="brand">
           <span className="mark" />
-          <span className="brand-name">Chemist Console</span>
+          <span className="brand-name">Apothic</span>
         </div>
         <div className="who">
           <span>{fullName || userName}</span>

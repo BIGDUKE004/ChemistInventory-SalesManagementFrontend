@@ -61,7 +61,7 @@ export default function Auth() {
       <div className="landing-inner">
         <div className="landing-copy">
           <span className="eyebrow-dot" />
-          <h1>Run the counter<br />without the chaos.</h1>
+          <h1>Know what's on<br />the shelf, before<br />it's not.</h1>
           <p className="lede">
             Add stock as it arrives, dispense it as it sells, and keep every
             batch and expiry date where you can see it. One counter screen
@@ -93,7 +93,7 @@ export default function Auth() {
               onChange={(e) => dispatch(setApiBase(e.target.value))}
             />
           </div>
- 
+
           <div className="tabs">
             <button className={mode === 'login' ? 'on' : ''} onClick={() => { setMode('login'); setError(''); }}>
               Log in

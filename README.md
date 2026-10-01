@@ -1,6 +1,7 @@
-# Chemist Console
+# Apothic
 
-React + Redux Toolkit frontend for the Chemist Spring Boot backend.
+React + Redux Toolkit frontend for the Chemist Spring Boot backend — stock, sales
+and staff on one counter screen.
 
 ## Run it
 
