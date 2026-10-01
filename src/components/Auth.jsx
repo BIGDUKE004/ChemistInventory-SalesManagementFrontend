@@ -48,7 +48,7 @@ export default function Auth() {
         apiBase,
         path: '/Authorization/Register',
         method: 'POST',
-        body: { fullName, userName: f.get('userName'), passWord: f.get('passWord') }
+        body: { fullName, userName: f.get('userName'), passWord: f.get('passWord'), storeName: f.get('storeName') }
       });
       logResult(dispatch, `Registered new account for ${fullName}`, true, raw);
       setNotice('Account created. Log in below.');
@@ -118,6 +118,7 @@ export default function Auth() {
           ) : (
             <form onSubmit={handleRegister}>
               <label>Full name<input name="fullName" required autoFocus /></label>
+              <label>Pharmacy name<input name="storeName" required placeholder="Use the same name as your team" /></label>
               <label>Username<input name="userName" required /></label>
               <label>Password<input name="passWord" type="password" required /></label>
               <button className="btn" type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</button>
